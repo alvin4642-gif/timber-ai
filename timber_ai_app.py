@@ -3,9 +3,9 @@ import re
 import math
 
 st.set_page_config(layout="wide")
-st.title("🪵 Timber AI Assistant V11 (Full System)")
+st.title("🪵 Timber AI Assistant V12 (No Missing Items)")
 
-# ================= INPUT =================
+# INPUT
 user_input = st.text_area("📥 Customer Enquiry", height=200)
 
 col1, col2, col3 = st.columns(3)
@@ -18,7 +18,7 @@ with col3:
 
 if st.button("🚀 Generate"):
 
-    # ================= DATA =================
+    # DATA
     inch_to_mm = {1:20,2:43,3:70,4:93,6:143,8:193,12:293}
 
     plywood_prices = {
@@ -37,95 +37,77 @@ if st.button("🚀 Generate"):
         pcs = max(math.floor(7200/thk/wid/len),1)
         return pcs, round(rate/pcs)
 
-    # ================= CLEAN INPUT =================
+    # CLEAN TEXT
     text = user_input.lower()
     text = text.replace('"',' inch ')
     text = text.replace("'",' ft ')
     text = text.replace("feet",'ft')
     text = text.replace("mmx",'mm x')
-    text = re.sub(r'(\d)ft(\d)', r'\1ft \2', text)   # FIX 10ft10pcs
+    text = re.sub(r'(\d)ft(\d)', r'\1ft \2', text)
     text = re.sub(r'\s+', ' ', text)
-
-    # ================= SPLIT ITEMS =================
-    items = re.split(r',| and |\n', text)
 
     reply = []
     total = 0
-    current = None
     has_timber = False
 
-    for item in items:
-        item = item.strip()
-        if not item:
-            continue
+    # ================= TIMBER SCAN =================
+    current = None
 
-        # detect species
-        if "kapur" in item:
-            current=("Kapur",kapur_rate)
-        elif "balau" in item:
-            current=("Balau",balau_rate)
-        elif "chengal" in item:
-            current=("Chengal",chengal_rate)
+    if "kapur" in text:
+        current=("Kapur",kapur_rate)
+    elif "balau" in text:
+        current=("Balau",balau_rate)
+    elif "chengal" in text:
+        current=("Chengal",chengal_rate)
 
-        # qty
-        qty = 1
-        q = re.findall(r'(\d+)\s*(pcs|nos|pieces|sheets?)', item)
-        if q:
-            qty = int(q[0][0])
+    timber_sizes = re.findall(r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft', text)
+    qty_list = re.findall(r'(\d+)\s*(pcs|nos|pieces)', text)
 
-        # ================= TIMBER =================
-        size = re.findall(r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft', item)
+    qty = int(qty_list[0][0]) if qty_list else 1
 
-        if size and current:
-            has_timber = True
+    for s in timber_sizes:
+        has_timber = True
 
-            for s in size:
-                v1,u1,v2,u2,ft = s
-                v1=int(v1); v2=int(v2); ft=int(ft)
+        v1,u1,v2,u2,ft = s
+        v1=int(v1); v2=int(v2); ft=int(ft)
 
-                thk = mm_to_inch(v1) if u1=="mm" else (v1 if v1<=12 else mm_to_inch(v1))
-                wid = mm_to_inch(v2) if u2=="mm" else (v2 if v2<=12 else mm_to_inch(v2))
+        thk = mm_to_inch(v1) if u1=="mm" else (v1 if v1<=12 else mm_to_inch(v1))
+        wid = mm_to_inch(v2) if u2=="mm" else (v2 if v2<=12 else mm_to_inch(v2))
 
-                length = 20 if ft==19 else ft
+        length = 20 if ft==19 else ft
 
-                pcs,price = calc(thk,wid,length,current[1])
+        pcs,price = calc(thk,wid,length,current[1])
 
-                mm1 = inch_to_mm.get(thk, thk*25)
-                mm2 = inch_to_mm.get(wid, wid*25)
+        mm1 = inch_to_mm.get(thk, thk*25)
+        mm2 = inch_to_mm.get(wid, wid*25)
 
-                line_total = price * qty
-                total += line_total
+        line_total = price * qty
+        total += line_total
 
-                reply.append(f"{current[0]} timber (planed)")
-                reply.append(f"{mm1}mm x {mm2}mm x {ft}ft @ ${price}/pcs x {qty} = ${line_total}\n")
+        reply.append(f"{current[0]} timber (planed)")
+        reply.append(f"{mm1}mm x {mm2}mm x {ft}ft @ ${price}/pcs x {qty} = ${line_total}\n")
 
-        # ================= PLYWOOD =================
-        if "plywood" in item or "plywod" in item:
+    # ================= PLYWOOD SCAN (SEPARATE) =================
+    plywood_blocks = re.findall(r'(marine|mr|furniture)?\s*plywood\s*(\d+\.?\d*)mm\s*(\d+)?', text)
 
-            if "marine" in item:
-                grade="marine"
-            elif "mr" in item or "floor" in item:
-                grade="mr"
+    for block in plywood_blocks:
+        grade = block[0] if block[0] else "furniture"
+        thickness = int(float(block[1]))
+        qty = int(block[2]) if block[2] else 1
+
+        if thickness in plywood_prices[grade]:
+
+            price = plywood_prices[grade][thickness]
+            line_total = price * qty
+            total += line_total
+
+            if grade=="mr" and thickness==3 and qty<10:
+                reply.append(f"MR plywood {thickness}mm @ ${price}/pcs (MOQ 10pcs)")
+                reply.append("⚠ MOQ not met\n")
             else:
-                grade="furniture"
+                reply.append(f"{grade.upper()} plywood {thickness}mm @ ${price}/pcs x {qty} = ${line_total}")
 
-            t = re.findall(r'(\d+\.?\d*)mm', item)
-
-            for x in t:
-                t = int(float(x))
-                if t in plywood_prices[grade]:
-
-                    price = plywood_prices[grade][t]
-                    line_total = price * qty
-                    total += line_total
-
-                    if grade=="mr" and t==3 and qty<10:
-                        reply.append(f"MR plywood {t}mm @ ${price}/pcs (MOQ 10pcs)")
-                        reply.append("⚠ MOQ not met\n")
-                    else:
-                        reply.append(f"{grade.upper()} plywood {t}mm @ ${price}/pcs x {qty} = ${line_total}")
-
-    # ================= OUTPUT =================
+    # OUTPUT
     reply.append(f"\nTotal: ${total}\n")
 
     if has_timber:
