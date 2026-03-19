@@ -5,6 +5,7 @@ import re
 st.set_page_config(layout="wide")
 st.title("🪵 Timber AI Assistant V10")
 
+# ================= INPUT =================
 user_input = st.text_area("📥 Customer Enquiry", height=200)
 
 col1, col2, col3 = st.columns(3)
@@ -15,33 +16,46 @@ with col2:
 with col3:
     chengal_rate = st.number_input("Chengal $/ton", value=6000)
 
-if st.button("🚀 Generate"):
+colA, colB = st.columns(2)
+generate = colA.button("🚀 Generate")
+refresh = colB.button("🔄 Refresh")
 
-    inch_to_mm = {1:20, 2:43, 3:70, 4:93, 6:143, 8:193, 12:293}
+if refresh:
+    st.rerun()
 
-    def mm_to_inch(mm):
-        for k,v in inch_to_mm.items():
-            if abs(mm-v) <=5:
-                return k
-        return max(round(mm/25.4),1)
+# ================= DATA =================
+inch_to_mm = {1:20, 2:43, 3:70, 4:93, 6:143, 8:193, 12:293}
 
-    def calc(thk,wid,len,rate):
-        pcs = max(math.floor(7200/thk/wid/len),1)
-        return pcs, round(rate/pcs)
+plywood_prices = {
+    "mr": {3:4.5, 6:9.9, 9:15, 12:21.5, 15:28, 18:31}
+}
 
-    def clean(text):
-        text = text.lower()
-        text = text.replace('"',' inch ')
-        text = text.replace("'",' ft ')
-        text = text.replace("feet",'ft')
-        text = text.replace("mmx",'mm x')
-        text = re.sub(r'\s+',' ',text)
-        return text
+# ================= FUNCTIONS =================
+def mm_to_inch(mm):
+    for k,v in inch_to_mm.items():
+        if abs(mm-v) <=5:
+            return k
+    return max(round(mm/25.4),1)
 
-    def extract(text):
-        # universal pattern
-        pattern = r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft'
-        return re.findall(pattern,text)
+def calc(thk,wid,len,rate):
+    pcs = max(math.floor(7200/thk/wid/len),1)
+    return pcs, round(rate/pcs)
+
+def clean(text):
+    text = text.lower()
+    text = text.replace('"',' inch ')
+    text = text.replace("'",' ft ')
+    text = text.replace("feet",'ft')
+    text = text.replace("mmx",'mm x')
+    text = re.sub(r'\s+',' ',text)
+    return text
+
+def extract(text):
+    pattern = r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft'
+    return re.findall(pattern,text)
+
+# ================= MAIN =================
+if generate:
 
     lines = user_input.split("\n")
     reply = []
@@ -72,7 +86,6 @@ if st.button("🚀 Generate"):
             v1,u1,v2,u2,ft = s
             v1=int(v1); v2=int(v2); ft=int(ft)
 
-            # determine unit
             if u1=="mm":
                 thk=mm_to_inch(v1)
             else:
@@ -98,12 +111,11 @@ if st.button("🚀 Generate"):
 
         # plywood
         if "plywood" in text or "plywod" in text:
-            price_map={"3":4.5,"6":9.9,"9":15,"12":21.5,"15":28,"18":31}
             t=re.findall(r'(\d+\.?\d*)mm',text)
             for x in t:
                 t=int(float(x))
-                price=price_map.get(str(t),0)
-                if price:
+                if t in plywood_prices["mr"]:
+                    price=plywood_prices["mr"][t]
                     line_total=price*qty
                     total+=line_total
                     reply.append(f"MR plywood {t}mm @ ${price}/pcs x {qty} = ${line_total}")
@@ -118,4 +130,4 @@ if st.button("🚀 Generate"):
     reply.append("30 Krani Loop (Blk A) #04-05")
     reply.append("TimMac @ Kranji S739570")
 
-    st.text_area("Reply", "\n".join(reply), height=350)
+    st.text_area("📩 Reply", "\n".join(reply), height=350)
