@@ -3,7 +3,7 @@ import re
 import math
 
 st.set_page_config(layout="wide")
-st.title("🪵 Timber AI Assistant V20 (Final Stable)")
+st.title("🪵 Timber AI Assistant V21")
 
 # INPUT
 user_input = st.text_area("📥 Customer Enquiry", height=200)
@@ -20,7 +20,14 @@ with col4:
 with col5:
     pure_keruing_rate = st.number_input("Pure Keruing $/ton", value=1000)
 
-if st.button("🚀 Generate"):
+colA, colB = st.columns(2)
+generate = colA.button("🚀 Generate")
+refresh = colB.button("🔄 Refresh")
+
+if refresh:
+    st.rerun()
+
+if generate:
 
     inch_to_mm = {1:20,2:43,3:70,4:93,6:143,8:193,12:293}
 
@@ -39,15 +46,15 @@ if st.button("🚀 Generate"):
 
     def detect_species(line):
         if "kapur" in line:
-            return ("Kapur", kapur_rate)
+            return ("Kapur", kapur_rate, "planed")
         if "balau" in line:
-            return ("Balau", balau_rate)
+            return ("Balau", balau_rate, "planed")
         if "chengal" in line:
-            return ("Chengal", chengal_rate)
+            return ("Chengal", chengal_rate, "planed")
         if "mixed hardwood" in line or "mixed keruing" in line:
-            return ("Mixed Keruing", mixed_keruing_rate)
+            return ("Mixed Keruing", mixed_keruing_rate, "sawn")
         if "pure keruing" in line:
-            return ("Pure Keruing", pure_keruing_rate)
+            return ("Pure Keruing", pure_keruing_rate, "sawn")
         return None
 
     plywood_prices = {
@@ -65,20 +72,11 @@ if st.button("🚀 Generate"):
             return "furniture"
         return None
 
-    # CLEAN TEXT
-    text = user_input.lower()
-    text = text.replace('"',' inch ')
-    text = text.replace("'",' ft ')
-    text = text.replace("feet",'ft')
-    text = text.replace("mmx",'mm x')
-    text = re.sub(r'\s+', ' ', text)
-
-    lines = user_input.lower().split("\n")  # keep original structure
+    lines = user_input.lower().split("\n")
 
     reply = []
     internal = []
     total = 0
-
     current_species = None
 
     for line in lines:
@@ -86,16 +84,13 @@ if st.button("🚀 Generate"):
         if not line:
             continue
 
-        # detect species
         sp = detect_species(line)
         if sp:
             current_species = sp
 
-        # qty
         qty_match = re.findall(r'(\d+)\s*(pcs|nos|pieces)', line)
         qty = int(qty_match[0][0]) if qty_match else 1
 
-        # ===== TIMBER =====
         sizes = re.findall(r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft', line)
 
         if sizes and current_species:
@@ -115,12 +110,21 @@ if st.button("🚀 Generate"):
                 line_total = price * qty
                 total += line_total
 
-                reply.append(f"{current_species[0]} timber (planed)")
-                reply.append(f"{mm1}mm x {mm2}mm x {ft}ft @ ${price:.2f}/pcs x {qty} = ${line_total:.2f}\n")
+                # 🔥 FORMAT DIFFERENCE HERE
+                if current_species[2] == "sawn":
+                    size_text = f'{thk}"x{wid}"x{ft}ft'
+                else:
+                    size_text = f"{mm1}mm x {mm2}mm x {ft}ft"
 
-                internal.append(f"{current_species[0]} | {thk}x{wid}x{length}ft | Pcs/Ton: {pcs_per_ton} | ${price:.2f}/pcs")
+                reply.append(f"{current_species[0]} timber ({current_species[2]})")
+                reply.append(f"{size_text} @ ${price:.2f}/pcs x {qty} = ${line_total:.2f}\n")
 
-        # ===== PLYWOOD =====
+                # 🔥 CLEAN INTERNAL VIEW
+                internal.append(
+                    f"{current_species[0]:<15} | {thk}x{wid}x{length}ft | Pcs/Ton: {pcs_per_ton:<8} | ${price:.2f}/pcs"
+                )
+
+        # PLYWOOD
         grade = detect_ply(line)
         thk_list = re.findall(r'(\d+\.?\d*)mm', line)
 
