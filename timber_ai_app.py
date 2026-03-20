@@ -3,7 +3,7 @@ import re
 import math
 
 st.set_page_config(layout="wide")
-st.title("🪵 Timber AI Assistant V17 (Stable)")
+st.title("🪵 Timber AI Assistant V18 (Multi-Group Fixed)")
 
 # INPUT
 user_input = st.text_area("📥 Customer Enquiry", height=200)
@@ -37,24 +37,6 @@ if st.button("🚀 Generate"):
         price = round(rate/pcs,2)
         return pcs_per_ton, pcs, price
 
-    # CLEAN INPUT
-    text = user_input.lower()
-    text = text.replace('"',' inch ')
-    text = text.replace("'",' ft ')
-    text = text.replace("feet",'ft')
-    text = text.replace("mmx",'mm x')
-    text = re.sub(r'(\d)ft(\d)', r'\1ft \2', text)
-    text = re.sub(r'\s+', ' ', text)
-
-    lines = text.split("\n")
-
-    reply = []
-    internal = []
-    total = 0
-    has_output = False
-
-    current_species = None
-
     def detect_species(line):
         if "kapur" in line:
             return ("Kapur", kapur_rate)
@@ -68,27 +50,56 @@ if st.button("🚀 Generate"):
             return ("Pure Keruing", pure_keruing_rate)
         return None
 
+    def detect_plywood_grade(line):
+        if "marine" in line:
+            return "marine"
+        if "mr" in line or "floor" in line:
+            return "mr"
+        if "plywood" in line:
+            return "furniture"
+        return None
+
+    plywood_prices = {
+        "marine": {6:27,9:37,12:45,15:57,18:68,25:96},
+        "furniture": {3:16,6:17,9:19,12:24,15:27,18:32,25:52},
+        "mr": {3:4.5,6:9.9,9:15,12:21.5,15:28,18:31}
+    }
+
+    # CLEAN
+    text = user_input.lower()
+    text = text.replace('"',' inch ')
+    text = text.replace("'",' ft ')
+    text = text.replace("feet",'ft')
+    text = text.replace("mmx",'mm x')
+    text = re.sub(r'(\d)ft(\d)', r'\1ft \2', text)
+    text = re.sub(r'\s+', ' ', text)
+
+    lines = text.split("\n")
+
+    reply = []
+    internal = []
+    total = 0
+
+    current_species = None
+
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        # detect species (no continue anymore)
+        # ===== NEW GROUP DETECTION =====
         sp = detect_species(line)
         if sp:
             current_species = sp
+            continue
 
-        # qty
+        # ===== TIMBER =====
+        sizes = re.findall(r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft', line)
         qty_match = re.findall(r'(\d+)\s*(pcs|nos|pieces)', line)
         qty = int(qty_match[0][0]) if qty_match else 1
 
-        # ================= TIMBER =================
-        sizes = re.findall(r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft', line)
-
         if sizes and current_species:
             for s in sizes:
-                has_output = True
-
                 v1,u1,v2,u2,ft = s
                 v1=int(v1); v2=int(v2); ft=int(ft)
 
@@ -110,49 +121,27 @@ if st.button("🚀 Generate"):
 
                 internal.append(f"{current_species[0]} | {thk}x{wid}x{length}ft | Pcs/Ton: {pcs_per_ton} | ${price:.2f}/pcs")
 
-        # ================= PLYWOOD =================
+        # ===== PLYWOOD (NO OVERWRITE) =====
         if "mm" in line:
+            grade = detect_plywood_grade(line)
             thk_list = re.findall(r'(\d+\.?\d*)mm', line)
 
             for t in thk_list:
                 thickness = int(float(t))
 
-                if "marine" in line:
-                    grade="marine"
-                elif "mr" in line or "floor" in line:
-                    grade="mr"
-                elif "plywood" in line:
-                    grade="furniture"
-                else:
-                    continue
-
-                price_map = {
-                    "marine": {6:27,9:37,12:45,15:57,18:68,25:96},
-                    "furniture": {3:16,6:17,9:19,12:24,15:27,18:32,25:52},
-                    "mr": {3:4.5,6:9.9,9:15,12:21.5,15:28,18:31}
-                }
-
-                if thickness in price_map[grade]:
-                    has_output = True
-
-                    price = price_map[grade][thickness]
+                if grade and thickness in plywood_prices[grade]:
+                    price = plywood_prices[grade][thickness]
                     line_total = price * qty
                     total += line_total
 
                     reply.append(f"{grade.upper()} plywood {thickness}mm @ ${price:.2f}/pcs x {qty} = ${line_total:.2f}")
 
-    # ================= FALLBACK =================
-    if not has_output:
-        reply.append("⚠ Unable to detect items clearly. Please check format (e.g. 4x2x10ft 10pcs or plywood 6mm 5pcs).")
-
     # OUTPUT
     st.text_area("🧠 Internal View", "\n".join(internal), height=200)
 
     reply.append(f"\nTotal: ${total:.2f}\n")
-
     reply.append("tolerance +-1~2mm")
     reply.append("tolerance length +-25~50mm\n")
-
     reply.append("Delivery / Self Collection:")
     reply.append("30 Krani Loop (Blk A) #04-05")
     reply.append("TimMac @ Kranji S739570")
