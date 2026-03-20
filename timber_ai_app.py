@@ -3,7 +3,7 @@ import re
 import math
 
 st.set_page_config(layout="wide")
-st.title("🪵 Timber AI Assistant V19 (Production Stable)")
+st.title("🪵 Timber AI Assistant V20 (Final Stable)")
 
 # INPUT
 user_input = st.text_area("📥 Customer Enquiry", height=200)
@@ -37,6 +37,34 @@ if st.button("🚀 Generate"):
         price = round(rate/pcs,2)
         return pcs_per_ton, pcs, price
 
+    def detect_species(line):
+        if "kapur" in line:
+            return ("Kapur", kapur_rate)
+        if "balau" in line:
+            return ("Balau", balau_rate)
+        if "chengal" in line:
+            return ("Chengal", chengal_rate)
+        if "mixed hardwood" in line or "mixed keruing" in line:
+            return ("Mixed Keruing", mixed_keruing_rate)
+        if "pure keruing" in line:
+            return ("Pure Keruing", pure_keruing_rate)
+        return None
+
+    plywood_prices = {
+        "marine": {6:27,9:37,12:45,15:57,18:68,25:96},
+        "mr": {3:4.5,6:9.9,9:15,12:21.5,15:28,18:31},
+        "furniture": {3:16,6:17,9:19,12:24,15:27,18:32,25:52}
+    }
+
+    def detect_ply(line):
+        if "marine" in line:
+            return "marine"
+        if "mr" in line:
+            return "mr"
+        if "plywood" in line:
+            return "furniture"
+        return None
+
     # CLEAN TEXT
     text = user_input.lower()
     text = text.replace('"',' inch ')
@@ -45,83 +73,67 @@ if st.button("🚀 Generate"):
     text = text.replace("mmx",'mm x')
     text = re.sub(r'\s+', ' ', text)
 
-    # SPECIES LIST
-    species_map = {
-        "kapur": ("Kapur", kapur_rate),
-        "balau": ("Balau", balau_rate),
-        "chengal": ("Chengal", chengal_rate),
-        "mixed hardwood": ("Mixed Keruing", mixed_keruing_rate),
-        "mixed keruing": ("Mixed Keruing", mixed_keruing_rate),
-        "pure keruing": ("Pure Keruing", pure_keruing_rate)
-    }
-
-    # FIND ALL TIMBER ITEMS
-    timber_pattern = r'((?:kapur|balau|chengal|mixed hardwood|mixed keruing|pure keruing)?\s*\d+\s*(?:mm|inch)?\s*x\s*\d+\s*(?:mm|inch)?\s*x\s*\d+\s*ft\s*\d*\s*(?:pcs)?)'
-    timber_items = re.findall(timber_pattern, text)
+    lines = user_input.lower().split("\n")  # keep original structure
 
     reply = []
     internal = []
     total = 0
 
-    for item in timber_items:
+    current_species = None
 
-        # detect species
-        sp = None
-        for key in species_map:
-            if key in item:
-                sp = species_map[key]
-
-        if not sp:
+    for line in lines:
+        line = line.strip()
+        if not line:
             continue
 
-        qty_match = re.findall(r'(\d+)\s*pcs', item)
-        qty = int(qty_match[0]) if qty_match else 1
+        # detect species
+        sp = detect_species(line)
+        if sp:
+            current_species = sp
 
-        size = re.findall(r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft', item)
+        # qty
+        qty_match = re.findall(r'(\d+)\s*(pcs|nos|pieces)', line)
+        qty = int(qty_match[0][0]) if qty_match else 1
 
-        if size:
-            v1,u1,v2,u2,ft = size[0]
-            v1=int(v1); v2=int(v2); ft=int(ft)
+        # ===== TIMBER =====
+        sizes = re.findall(r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft', line)
 
-            thk = mm_to_inch(v1) if u1=="mm" else v1
-            wid = mm_to_inch(v2) if u2=="mm" else v2
-            length = 20 if ft==19 else ft
+        if sizes and current_species:
+            for s in sizes:
+                v1,u1,v2,u2,ft = s
+                v1=int(v1); v2=int(v2); ft=int(ft)
 
-            pcs_per_ton, pcs, price = calc(thk,wid,length,sp[1])
+                thk = mm_to_inch(v1) if u1=="mm" else v1
+                wid = mm_to_inch(v2) if u2=="mm" else v2
+                length = 20 if ft==19 else ft
 
-            mm1 = inch_to_mm.get(thk, thk*25)
-            mm2 = inch_to_mm.get(wid, wid*25)
+                pcs_per_ton, pcs, price = calc(thk,wid,length,current_species[1])
 
-            line_total = price * qty
-            total += line_total
+                mm1 = inch_to_mm.get(thk, thk*25)
+                mm2 = inch_to_mm.get(wid, wid*25)
 
-            reply.append(f"{sp[0]} timber (planed)")
-            reply.append(f"{mm1}mm x {mm2}mm x {ft}ft @ ${price:.2f}/pcs x {qty} = ${line_total:.2f}\n")
+                line_total = price * qty
+                total += line_total
 
-            internal.append(f"{sp[0]} | {thk}x{wid}x{length}ft | Pcs/Ton: {pcs_per_ton} | ${price:.2f}/pcs")
+                reply.append(f"{current_species[0]} timber (planed)")
+                reply.append(f"{mm1}mm x {mm2}mm x {ft}ft @ ${price:.2f}/pcs x {qty} = ${line_total:.2f}\n")
 
-    # ===== PLYWOOD =====
-    plywood_prices = {
-        "marine": {6:27,9:37,12:45,15:57,18:68,25:96},
-        "mr": {3:4.5,6:9.9,9:15,12:21.5,15:28,18:31},
-        "furniture": {3:16,6:17,9:19,12:24,15:27,18:32,25:52}
-    }
+                internal.append(f"{current_species[0]} | {thk}x{wid}x{length}ft | Pcs/Ton: {pcs_per_ton} | ${price:.2f}/pcs")
 
-    ply_pattern = r'(marine|mr|plywood)[^\d]*(\d+)\s*mm\s*(\d*)\s*(pcs)?'
-    ply_items = re.findall(ply_pattern, text)
+        # ===== PLYWOOD =====
+        grade = detect_ply(line)
+        thk_list = re.findall(r'(\d+\.?\d*)mm', line)
 
-    for g,t,q,_ in ply_items:
-        thickness = int(t)
-        qty = int(q) if q else 1
+        if grade:
+            for t in thk_list:
+                thickness = int(float(t))
 
-        grade = "mr" if g=="mr" else ("marine" if g=="marine" else "furniture")
+                if thickness in plywood_prices[grade]:
+                    price = plywood_prices[grade][thickness]
+                    line_total = price * qty
+                    total += line_total
 
-        if thickness in plywood_prices[grade]:
-            price = plywood_prices[grade][thickness]
-            line_total = price * qty
-            total += line_total
-
-            reply.append(f"{grade.upper()} plywood {thickness}mm @ ${price:.2f}/pcs x {qty} = ${line_total:.2f}")
+                    reply.append(f"{grade.upper()} plywood {thickness}mm @ ${price:.2f}/pcs x {qty} = ${line_total:.2f}")
 
     # OUTPUT
     st.text_area("🧠 Internal View", "\n".join(internal), height=200)
