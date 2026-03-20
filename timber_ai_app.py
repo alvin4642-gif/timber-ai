@@ -3,7 +3,7 @@ import re
 import math
 
 st.set_page_config(layout="wide")
-st.title("🪵 Timber AI Assistant V15")
+st.title("🪵 Timber AI Assistant V16")
 
 # ================= INPUT =================
 user_input = st.text_area("📥 Customer Enquiry", height=200)
@@ -60,41 +60,48 @@ if generate:
     text = re.sub(r'(\d)ft(\d)', r'\1ft \2', text)
     text = re.sub(r'\s+', ' ', text)
 
-    # 🔥 split by comma / line
-    items = re.split(r',|\n', text)
+    lines = text.split("\n")
 
     reply = []
     internal = []
     total = 0
     has_timber = False
 
-    # ================= PROCESS EACH ITEM =================
-    for item in items:
-        item = item.strip()
-        if not item:
+    # 🔥 MEMORY SYSTEM
+    current_species = None
+
+    def detect_species(line):
+        if "kapur" in line:
+            return ("Kapur", kapur_rate)
+        if "balau" in line:
+            return ("Balau", balau_rate)
+        if "chengal" in line:
+            return ("Chengal", chengal_rate)
+        if "mixed keruing" in line or "mixed hardwood" in line:
+            return ("Mixed Keruing", mixed_keruing_rate)
+        if "pure keruing" in line:
+            return ("Pure Keruing", pure_keruing_rate)
+        return None
+
+    for line in lines:
+        line = line.strip()
+        if not line:
             continue
 
-        # 🔥 detect species PER ITEM
-        if "kapur" in item:
-            species=("Kapur", kapur_rate)
-        elif "balau" in item:
-            species=("Balau", balau_rate)
-        elif "chengal" in item:
-            species=("Chengal", chengal_rate)
-        elif "mixed keruing" in item:
-            species=("Mixed Keruing", mixed_keruing_rate)
-        elif "pure keruing" in item:
-            species=("Pure Keruing", pure_keruing_rate)
-        else:
-            species=None
+        # 🔥 update species if found
+        sp = detect_species(line)
+        if sp:
+            current_species = sp
+            continue  # move to next line
 
-        qty_match = re.findall(r'(\d+)\s*(pcs|nos|pieces)', item)
+        # qty
+        qty_match = re.findall(r'(\d+)\s*(pcs|nos|pieces)', line)
         qty = int(qty_match[0][0]) if qty_match else 1
 
         # ================= TIMBER =================
-        sizes = re.findall(r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft', item)
+        sizes = re.findall(r'(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*(mm|inch)?\s*x\s*(\d+)\s*ft', line)
 
-        if sizes and species:
+        if sizes and current_species:
             has_timber = True
 
             for s in sizes:
@@ -106,7 +113,7 @@ if generate:
 
                 length = 20 if ft==19 else ft
 
-                pcs_per_ton, pcs, price = calc(thk,wid,length,species[1])
+                pcs_per_ton, pcs, price = calc(thk,wid,length,current_species[1])
 
                 mm1 = inch_to_mm.get(thk, thk*25)
                 mm2 = inch_to_mm.get(wid, wid*25)
@@ -114,25 +121,23 @@ if generate:
                 line_total = price * qty
                 total += line_total
 
-                # customer reply
-                reply.append(f"{species[0]} timber (planed)")
+                reply.append(f"{current_species[0]} timber (planed)")
                 reply.append(f"{mm1}mm x {mm2}mm x {ft}ft @ ${price:.2f}/pcs x {qty} = ${line_total:.2f}\n")
 
-                # 🔥 clean internal format
-                internal.append(f"{species[0]} | {thk}x{wid}x{length}ft | Pcs/Ton: {pcs_per_ton} | ${price:.2f}/pcs")
+                internal.append(f"{current_species[0]} | {thk}x{wid}x{length}ft | Pcs/Ton: {pcs_per_ton} | ${price:.2f}/pcs")
 
         # ================= PLYWOOD =================
-        if "mm" in item:
-            thk_list = re.findall(r'(\d+\.?\d*)mm', item)
+        if "mm" in line:
+            thk_list = re.findall(r'(\d+\.?\d*)mm', line)
 
             for t in thk_list:
                 thickness = int(float(t))
 
-                if "marine" in item:
+                if "marine" in line:
                     grade="marine"
-                elif "mr" in item or "floor" in item:
+                elif "mr" in line or "floor" in line:
                     grade="mr"
-                elif "plywood" in item:
+                elif "plywood" in line:
                     grade="furniture"
                 else:
                     continue
