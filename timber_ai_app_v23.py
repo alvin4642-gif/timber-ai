@@ -7,7 +7,7 @@ import math
 # PAGE
 # ==============================
 st.set_page_config(layout="wide")
-st.title("🪵 Timber AI Assistant V23")
+st.title("🪵 Timber AI Assistant V23.1")
 
 # ==============================
 # RESET
@@ -27,24 +27,15 @@ mode = st.radio(
 )
 
 # ==============================
-# RATES
+# RATES (MOBILE OPTIMIZED - STACKED)
 # ==============================
-c1, c2, c3, c4, c5 = st.columns(5)
+st.subheader("Rates ($/ton)")
 
-with c1:
-    kapur_rate = st.number_input("Kapur $/ton", value=3800)
-
-with c2:
-    balau_rate = st.number_input("Balau $/ton", value=5500)
-
-with c3:
-    chengal_rate = st.number_input("Chengal $/ton", value=6000)
-
-with c4:
-    mixed_keruing_rate = st.number_input("Mixed Keruing $/ton", value=650)
-
-with c5:
-    pure_keruing_rate = st.number_input("Pure Keruing $/ton", value=1000)
+kapur_rate = st.number_input("Kapur", value=3800)
+balau_rate = st.number_input("Balau", value=5500)
+chengal_rate = st.number_input("Chengal", value=6000)
+mixed_keruing_rate = st.number_input("Mixed Keruing", value=650)
+pure_keruing_rate = st.number_input("Pure Keruing", value=1000)
 
 # ==============================
 # CONSTANTS
@@ -58,7 +49,6 @@ inch_to_mm = {
     8:193
 }
 
-# UPDATED PLYWOOD PRICES (V23)
 plywood_prices = {
     "Marine": {
         6:25.5,
@@ -123,78 +113,76 @@ def is_keruing(species):
     return species in ["Mixed Keruing", "Pure Keruing"]
 
 # ==============================
-# INPUT MODE 1
+# FORM (SINGLE TAP GENERATE)
 # ==============================
-if mode == "Customer Enquiry":
-    enquiry = st.text_area("Customer Enquiry", height=200)
+with st.form("main_form"):
+
+    if mode == "Customer Enquiry":
+        enquiry = st.text_area("Customer Enquiry", height=200)
+
+    if mode == "Manual Table":
+
+        st.subheader("Timber Table")
+
+        timber_df = pd.DataFrame([{
+            "Species":"Kapur",
+            "Thickness":None,
+            "T Unit":"mm",
+            "Width":None,
+            "W Unit":"mm",
+            "Length":None,
+            "L Unit":"m",
+            "Qty":None
+        }])
+
+        timber_table = st.data_editor(
+            timber_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="timber",
+            column_config={
+                "Species": st.column_config.SelectboxColumn(
+                    options=["Kapur","Balau","Chengal","Mixed Keruing","Pure Keruing"]
+                ),
+                "T Unit": st.column_config.SelectboxColumn(
+                    options=["mm","inch"]
+                ),
+                "W Unit": st.column_config.SelectboxColumn(
+                    options=["mm","inch"]
+                ),
+                "L Unit": st.column_config.SelectboxColumn(
+                    options=["m","ft"]
+                )
+            }
+        )
+
+        st.subheader("Plywood Table")
+
+        plywood_df = pd.DataFrame([{
+            "Type":"Marine",
+            "Thickness":None,
+            "Qty":None
+        }])
+
+        plywood_table = st.data_editor(
+            plywood_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="plywood",
+            column_config={
+                "Type": st.column_config.SelectboxColumn(
+                    options=["Marine","Furniture","MR"]
+                )
+            }
+        )
+
+    colA, colB = st.columns(2)
+    generate = colA.form_submit_button("Generate")
+    refresh = colB.form_submit_button("Refresh")
 
 # ==============================
-# INPUT MODE 2
+# ACTIONS
 # ==============================
-if mode == "Manual Table":
-
-    st.subheader("Timber Table")
-
-    timber_df = pd.DataFrame([{
-        "Species":"Kapur",
-        "Thickness":None,
-        "T Unit":"mm",
-        "Width":None,
-        "W Unit":"mm",
-        "Length":None,
-        "L Unit":"m",
-        "Qty":None
-    }])
-
-    timber_table = st.data_editor(
-        timber_df,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="timber",
-        column_config={
-            "Species": st.column_config.SelectboxColumn(
-                options=["Kapur","Balau","Chengal","Mixed Keruing","Pure Keruing"]
-            ),
-            "T Unit": st.column_config.SelectboxColumn(
-                options=["mm","inch"]
-            ),
-            "W Unit": st.column_config.SelectboxColumn(
-                options=["mm","inch"]
-            ),
-            "L Unit": st.column_config.SelectboxColumn(
-                options=["m","ft"]
-            )
-        }
-    )
-
-    st.subheader("Plywood Table")
-
-    plywood_df = pd.DataFrame([{
-        "Type":"Marine",
-        "Thickness":None,
-        "Qty":None
-    }])
-
-    plywood_table = st.data_editor(
-        plywood_df,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="plywood",
-        column_config={
-            "Type": st.column_config.SelectboxColumn(
-                options=["Marine","Furniture","MR"]
-            )
-        }
-    )
-
-# ==============================
-# BUTTONS
-# ==============================
-colA, colB = st.columns(2)
-
-generate = colA.button("Generate")
-refresh = colB.button("Refresh")
-
 if refresh:
     reset_all()
 
@@ -207,9 +195,6 @@ if generate:
     customer_reply = []
     grand_total = 0
 
-    # ==============================
-    # CUSTOMER ENQUIRY MODE
-    # ==============================
     if mode == "Customer Enquiry":
 
         lines = enquiry.lower().split("\n")
@@ -286,9 +271,6 @@ f"""{current_species} timber
 """
                 )
 
-    # ==============================
-    # TABLE MODE
-    # ==============================
     if mode == "Manual Table":
 
         for _, row in timber_table.iterrows():
@@ -342,9 +324,6 @@ f"""{species} timber
 """
             )
 
-        # ==============================
-        # PLYWOOD
-        # ==============================
         for _, row in plywood_table.iterrows():
 
             if pd.isna(row["Thickness"]) or pd.isna(row["Qty"]):
@@ -386,9 +365,6 @@ f"""{grade} plywood {thk}mm @ ${price}/pcs x {qty} = ${line_total}"""
             if note:
                 customer_reply.append(note)
 
-    # ==============================
-    # OUTPUT
-    # ==============================
     st.text_area("Internal View", "\n\n".join(internal_view), height=350)
 
     customer_reply.append(f"\nTotal : ${round(grand_total,2)}")
